@@ -19,19 +19,24 @@ const initializeCron = async (cron: StoreCron) => {
   console.log(`Initializing cron ${cron.cron} ${cron.name}`);
   const abortController = new AbortController();
   cronController.set(cron.name, abortController);
-  await Deno.cron(cron.name, cron.cron, {
-    signal: abortController.signal,
-  }, async () => {
-    console.log(`Running cron ${cron.cron}`);
-    for (const address of cron.rfAdresses) {
-      try {
-        controller.setTemperature(address, cron.temperature);
-      } catch (_error) {
-        await controller.connect();
-        controller.setTemperature(address, cron.temperature);
+  try {
+    await Deno.cron(cron.name, cron.cron, {
+      signal: abortController.signal,
+    }, async () => {
+      console.log(`Running cron ${cron.cron}`);
+      for (const address of cron.rfAdresses) {
+        try {
+          controller.setTemperature(address, cron.temperature);
+        } catch (_error) {
+          await controller.connect();
+          controller.setTemperature(address, cron.temperature);
+        }
       }
-    }
-  });
+    });
+  }
+  catch (error) {
+    console.error(`Error in cron ${cron.name}: ${error}`);
+  }
 };
 
 const removeCron = (name: string) => {
