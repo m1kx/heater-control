@@ -35,7 +35,7 @@ jobs:
             --name heater-api \
             --restart unless-stopped \
             -p 999:999 \
-            -v sqlite-data:/app \
+            --mount source=sqlite-data,target=/app/data \
             --env-file .env \
             heater-api:latest
             
