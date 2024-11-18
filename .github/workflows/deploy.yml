@@ -1,0 +1,43 @@
+name: Deploy Deno API
+on: push
+
+jobs:
+  deploy:
+    runs-on: self-hosted
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Create .env file
+        run: |
+          echo "${{ secrets.ENV_FILE }}" > .env
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: false
+          load: true
+          tags: heater-api:latest
+          platforms: linux/arm64
+
+      - name: Stop existing container
+        continue-on-error: true
+        run: docker stop heater-api && docker rm heater-api
+
+      - name: Run Docker container
+        run: |
+          docker run -d \
+            --name heater-api \
+            --restart unless-stopped \
+            -p 999:999 \
+            -v sqlite-data:/app \
+            --env-file .env \
+            heater-api:latest
+            
+      - name: Clean up .env file
+        run: rm .env

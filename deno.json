@@ -1,0 +1,10 @@
+{
+  "tasks": {
+    "dev": "DEV=true deno run --unstable-cron --allow-all --watch main.ts",
+    "buildpi": "deno compile --allow-all --unstable-cron --target aarch64-unknown-linux-gnu main.ts"
+  },
+  "imports": {
+    "@std/assert": "jsr:@std/assert@1",
+    "cron-time-generator": "npm:cron-time-generator@^2.0.3"
+  }
+}
