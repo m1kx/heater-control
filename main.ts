@@ -160,7 +160,12 @@ router.post("/newcron", async (ctx) => {
     ) {
       throw new Error("Missing parameter in request body");
     }
-    CronHandler.newCron(request);
+    try {
+      CronHandler.newCron(request);
+    } catch (error) {
+      throw error;
+    }
+    
   } catch (error) {
     ctx.response.body = {
       success: false,
