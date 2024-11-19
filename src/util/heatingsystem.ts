@@ -76,10 +76,8 @@ class TcpClient {
         }
       }
     } catch (error) {
-      this.scheduleReconnect();
-      throw error;
-    } finally {
-      this.releaseLock();
+      await this.connect();
+      await this.sendMessageWithResponse(message);
     }
   }
 
