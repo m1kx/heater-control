@@ -26,11 +26,23 @@ class TcpClient {
   private host: string;
   private port: number;
   private reconnectInterval: number = 1000;
+  private lock = false; // Simple lock for synchronization
 
   constructor(host: string, port: number, reconnectInterval: number = 1000) {
     this.host = host;
     this.port = port;
     this.reconnectInterval = reconnectInterval;
+  }
+
+  private async acquireLock(): Promise<void> {
+    while (this.lock) {
+      await new Promise((resolve) => setTimeout(resolve, 10)); // Wait briefly before checking again
+    }
+    this.lock = true;
+  }
+
+  private releaseLock(): void {
+    this.lock = false;
   }
 
   async connect() {
@@ -48,13 +60,15 @@ class TcpClient {
   }
 
   async sendMessageWithResponse(message: string) {
-    console.log("sending");
-    if (!this.conn) {
-      await this.connect();
-    }
+    await this.acquireLock();
     try {
+      console.log("sending");
+      if (!this.conn) {
+        await this.connect();
+      }
       const data = new TextEncoder().encode(`${message}\r\n`);
       await this.conn?.write(data);
+
       while (true) {
         const response = await this.receiveMessage();
         if (response.startsWith(message.split(":")[0].toUpperCase())) {
@@ -64,19 +78,24 @@ class TcpClient {
     } catch (error) {
       this.scheduleReconnect();
       throw error;
+    } finally {
+      this.releaseLock();
     }
   }
 
   async sendMessageNoResponse(message: string) {
-    if (!this.conn) {
-      await this.connect();
-    }
+    await this.acquireLock();
     try {
+      if (!this.conn) {
+        await this.connect();
+      }
       const data = new TextEncoder().encode(`${message}\r\n`);
       await this.conn?.write(data);
     } catch (error) {
-      this.scheduleReconnect();
+      this.handleClose();
       throw error;
+    } finally {
+      this.releaseLock();
     }
   }
 
@@ -89,11 +108,11 @@ class TcpClient {
       const bytes = await this.conn!.read(buffer);
 
       if (bytes !== null) {
-        return (new TextDecoder().decode(buffer.subarray(0, bytes)));
+        return new TextDecoder().decode(buffer.subarray(0, bytes));
       }
       return "";
     } catch (_error) {
-      this.scheduleReconnect();
+      this.handleClose();
       return "";
     }
   }
