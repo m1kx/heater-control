@@ -59,7 +59,7 @@ class TcpClient {
     }
   }
 
-  async sendMessageWithResponse(message: string): Promise<string> {
+  async sendMessageWithResponse(message: string) {
     await this.acquireLock();
     try {
       console.log("sending");
@@ -76,8 +76,10 @@ class TcpClient {
         }
       }
     } catch (error) {
-      await this.connect();
-      return this.sendMessageWithResponse(message);
+      this.scheduleReconnect();
+      throw error;
+    } finally {
+      this.releaseLock();
     }
   }
 
