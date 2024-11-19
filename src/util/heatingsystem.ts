@@ -257,7 +257,12 @@ export class HeatingSystemController {
 
     const payloadBase64 = encode(payload);
     const message = `s:${payloadBase64}`;
-    await this.client.sendMessageWithResponse(message);
+    try {
+      await this.client.sendMessageWithResponse(message);
+    } catch (error) {
+      await this.connect();
+      await this.client.sendMessageWithResponse(message);
+    }
   }
 
   // Helper to convert RF address string to bytes
