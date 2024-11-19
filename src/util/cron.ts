@@ -33,8 +33,7 @@ const initializeCron = async (cron: StoreCron) => {
         }
       }
     });
-  }
-  catch (error) {
+  } catch (error) {
     console.error(`Error in cron ${cron.name}: ${error}`);
   }
 };

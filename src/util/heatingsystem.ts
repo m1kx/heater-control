@@ -4,7 +4,6 @@ import {
   encode,
 } from "https://deno.land/std@0.196.0/encoding/base64.ts";
 
-// Define types for messages
 export type Mode = "auto" | "manual" | "vacation" | "boost";
 
 export interface Device {
@@ -22,21 +21,21 @@ export interface CubeInfo {
   freeMemorySlots: string;
 }
 
-// HeatingSystemController class
-export class HeatingSystemController {
+class TcpClient {
+  private conn: Deno.Conn | null = null;
   private host: string;
   private port: number;
-  private socket: Deno.Conn | null = null;
+  private reconnectInterval: number = 1000;
 
-  constructor(host: string, port: number = 62910) {
+  constructor(host: string, port: number, reconnectInterval: number = 1000) {
     this.host = host;
     this.port = port;
+    this.reconnectInterval = reconnectInterval;
   }
 
-  // Connect to the heating system
-  async connect(): Promise<string> {
-    this.socket = await Deno.connect({ hostname: this.host, port: this.port });
-    let info = '';
+  async connect() {
+    this.conn = await Deno.connect({ hostname: this.host, port: this.port });
+    let info = "";
     while (true) {
       const response = await this.receiveMessage();
       if (response.startsWith("H:")) {
@@ -48,61 +47,93 @@ export class HeatingSystemController {
     }
   }
 
-  // Disconnect from the heating system
-  async disconnect() {
-    if (this.socket) {
-      await this.sendMessage("q:");
-      this.socket.close();
-      this.socket = null;
-    }
-  }
-
-  // Send a message to the heating system
-  private async sendMessage(message: string) {
-    if (!this.socket) {
-      throw new Error("Not connected");
+  async sendMessageWithResponse(message: string) {
+    console.log("sending");
+    if (!this.conn) {
+      await this.connect();
     }
     try {
-      const data = new TextEncoder().encode(message + "\r\n");
-      await this.socket.write(data);
-    } catch (_error) {
+      const data = new TextEncoder().encode(`${message}\r\n`);
+      await this.conn?.write(data);
+      while (true) {
+        const response = await this.receiveMessage();
+        if (response.startsWith(message.split(":")[0].toUpperCase())) {
+          return response;
+        }
+      }
+    } catch (error) {
+      this.scheduleReconnect();
+      throw error;
+    }
+  }
+
+  async sendMessageNoResponse(message: string) {
+    if (!this.conn) {
       await this.connect();
-      this.sendMessage(message);
+    }
+    try {
+      const data = new TextEncoder().encode(`${message}\r\n`);
+      await this.conn?.write(data);
+    } catch (error) {
+      this.scheduleReconnect();
+      throw error;
     }
   }
 
-  // Receive a message from the heating system
   private async receiveMessage(): Promise<string> {
-    if (!this.socket) {
-      throw new Error("Not connected");
+    try {
+      if (!this.conn) {
+        await this.connect();
+      }
+      const buffer = new Uint8Array(1024);
+      const bytes = await this.conn!.read(buffer);
+
+      if (bytes !== null) {
+        return (new TextDecoder().decode(buffer.subarray(0, bytes)));
+      }
+      return "";
+    } catch (_error) {
+      this.scheduleReconnect();
+      return "";
     }
-    const buffer = new Uint8Array(1024);
-    const n = await this.socket.read(buffer);
-    if (n === null) {
-      throw new Error("Connection closed");
-    }
-    return new TextDecoder().decode(buffer.subarray(0, n));
   }
 
-  // Send a command and receive the response
-  private async sendCommand(command: string): Promise<string> {
-    await this.sendMessage(command);
-    return await this.receiveMessage();
+  private scheduleReconnect() {
+    setTimeout(() => {
+      this.connect();
+    }, this.reconnectInterval);
   }
 
-  // Get configuration (C Message)
+  private handleClose() {
+    this.scheduleReconnect();
+  }
+
+  close() {
+    this.conn?.close();
+    this.conn = null;
+  }
+}
+
+export class HeatingSystemController {
+  private client: TcpClient;
+
+  constructor(host: string, port: number = 62910) {
+    this.client = new TcpClient(host, port);
+  }
+
+  async connect(): Promise<void> {
+    const info = await this.client.connect();
+    console.log(`Connected to Cube`, info);
+  }
+
   async getConfiguration(): Promise<{ address: string; configData: string }> {
-    await this.sendMessage("c:");
-    const response = await this.receiveMessage();
+    const response = await this.client.sendMessageWithResponse("c:");
     const [address, configData] = response.slice(2).split(",");
     return { address, configData };
   }
 
-  // Get device list (L Message)
   async getDeviceList(): Promise<Device[]> {
-    await this.sendMessage("l:");
-    const response = await this.receiveMessage();
-    console.log('l response', response)
+    const response = await this.client.sendMessageWithResponse("l:");
     const base64Data = response.slice(2).trim();
     const decodedData = decode(base64Data);
     const devices: Device[] = [];
@@ -134,8 +165,6 @@ export class HeatingSystemController {
       devices.push(device);
     }
 
-    console.log(devices)
-
     return devices;
   }
 
@@ -144,15 +173,13 @@ export class HeatingSystemController {
       const timeout = setTimeout(() => {
         reject(new Error("Timeout"));
       }, 59000);
-      this.sendMessage("n:003c").then(() => {
-        this.receiveMessage().then((response) => {
-          clearTimeout(timeout);
-          const base64Data = response.slice(2).trim();
-          const decodedData = decode(base64Data);
-          const rfAddressBytes = decodedData.slice(1, 4);
-          resolve({
-            rfAddress: this.bytesToHex(rfAddressBytes),
-          });
+      this.client.sendMessageWithResponse("n:003c").then((response) => {
+        clearTimeout(timeout);
+        const base64Data = response.slice(2).trim();
+        const decodedData = decode(base64Data);
+        const rfAddressBytes = decodedData.slice(1, 4);
+        resolve({
+          rfAddress: this.bytesToHex(rfAddressBytes),
         });
       });
     });
@@ -169,7 +196,7 @@ export class HeatingSystemController {
     );
     const rfAddressesBase64 = encode(new Uint8Array(rfAddressesBytes));
     const message = `t:${numberOfDevices},${forceFlag},${rfAddressesBase64}`;
-    await this.sendCommand(message)
+    await this.client.sendMessageNoResponse(message);
   }
 
   // Get cube information (H Message)
@@ -211,8 +238,7 @@ export class HeatingSystemController {
 
     const payloadBase64 = encode(payload);
     const message = `s:${payloadBase64}`;
-    const cmd = await this.sendCommand(message);
-    console.log('cmd', cmd)
+    await this.client.sendMessageWithResponse(message);
   }
 
   // Helper to convert RF address string to bytes
@@ -263,9 +289,8 @@ export class HeatingSystemController {
       .map((byte) => byte.toString(16).padStart(2, "0"))
       .join("");
     const message = `z:${durationHex},D,${rfAddressHex}`;
-    console.log(message)
-    const answer = await this.sendCommand(message);
-    return answer
+    const answer = await this.client.sendMessageWithResponse(message);
+    return answer;
   }
 }
 

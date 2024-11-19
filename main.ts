@@ -6,14 +6,11 @@ import { controller, Device } from "./src/util/heatingsystem.ts";
 
 const router = new Router();
 
-const info = await controller.connect();
+await controller.connect();
 console.log("connected");
 
 Database.create(Deno.env.get("DATABASE_PATH") || "database.db");
 console.log("Created database");
-
-const cubeInfo = await controller.getCubeInfo(info);
-console.log("Cube Info:", cubeInfo);
 
 const deviceList = await controller.getDeviceList();
 console.log("Device List:", deviceList);
@@ -165,7 +162,6 @@ router.post("/newcron", async (ctx) => {
     } catch (error) {
       throw error;
     }
-    
   } catch (error) {
     ctx.response.body = {
       success: false,

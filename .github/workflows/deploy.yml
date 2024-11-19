@@ -4,7 +4,7 @@ on: push
 jobs:
   deploy:
     runs-on: self-hosted
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -38,6 +38,6 @@ jobs:
             --mount source=sqlite-data,target=/app/data \
             --env-file .env \
             heater-api:latest
-            
+
       - name: Clean up .env file
         run: rm .env
