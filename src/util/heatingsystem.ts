@@ -62,8 +62,13 @@ export class HeatingSystemController {
     if (!this.socket) {
       throw new Error("Not connected");
     }
-    const data = new TextEncoder().encode(message + "\r\n");
-    await this.socket.write(data);
+    try {
+      const data = new TextEncoder().encode(message + "\r\n");
+      await this.socket.write(data);
+    } catch (_error) {
+      await this.connect();
+      this.sendMessage(message);
+    }
   }
 
   // Receive a message from the heating system
