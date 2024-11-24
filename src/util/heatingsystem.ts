@@ -1,8 +1,9 @@
-// Import necessary modules
 import {
   decode,
   encode,
 } from "https://deno.land/std@0.196.0/encoding/base64.ts";
+
+import net from "node:net";
 
 export type Mode = "auto" | "manual" | "vacation" | "boost";
 
@@ -22,11 +23,13 @@ export interface CubeInfo {
 }
 
 class TcpClient {
-  private conn: Deno.Conn | null = null;
+  private conn: net.Socket | null = null;
+  private connected = false;
   private host: string;
   private port: number;
   private reconnectInterval: number = 1000;
-  private lock = false; // Simple lock for synchronization
+  private lock = false;
+  private commandQueue: Map<string, (data: string) => void> = new Map();
 
   constructor(host: string, port: number, reconnectInterval: number = 1000) {
     this.host = host;
@@ -45,91 +48,86 @@ class TcpClient {
     this.lock = false;
   }
 
-  async connect() {
-    this.conn = await Deno.connect({ hostname: this.host, port: this.port });
-    let info = "";
-    while (true) {
-      const response = await this.receiveMessage();
-      if (response.startsWith("H:")) {
-        info = response;
-      }
-      if (response.startsWith("L:")) {
-        return info;
-      }
-    }
-  }
+  connect() {
+    return new Promise((resolve, reject) => {
+      const client = new net.Socket();
 
-  async sendMessageWithResponse(message: string) {
-    await this.acquireLock();
-    try {
-      console.log("sending");
-      if (!this.conn) {
-        await this.connect();
-      }
-      const data = new TextEncoder().encode(`${message}\r\n`);
-      await this.conn?.write(data);
+      this.commandQueue.set("L:", resolve);
 
-      while (true) {
-        const response = await this.receiveMessage();
-        if (response.startsWith(message.split(":")[0].toUpperCase())) {
-          return response;
+      client.connect(this.port, this.host, () => {
+        this.connected = true;
+        console.log("Connected to cube");
+      });
+
+      client.on("data", (data) => {
+        const stringData = data.toString();
+        for (const [command, resolveCommand] of this.commandQueue) {
+          if (stringData.split(':')[0].includes(command.split(':')[0].toUpperCase())) {
+            resolveCommand(stringData);
+            this.commandQueue.delete(command);
+          }
         }
-      }
-    } catch (error) {
-      this.scheduleReconnect();
-      throw error;
-    } finally {
-      this.releaseLock();
-    }
+      })
+
+      client.on("error", (err) => {
+        reject(err);
+      })
+
+      client.on("close", () => {
+        this.connected = false;
+        const interval = setInterval(() => {
+          if (this.connected) {
+            clearInterval(interval);
+            return;
+          }
+          this.connect();
+        }, this.reconnectInterval);
+      });
+
+      this.conn = client;
+    });
   }
 
-  async sendMessageNoResponse(message: string) {
-    await this.acquireLock();
-    try {
+  sendMessageWithResponse(command: string): Promise<string> {
+    return new Promise((resolve, reject) => {
       if (!this.conn) {
-        await this.connect();
+        reject(new Error("Not connected"));
+        return;
       }
-      const data = new TextEncoder().encode(`${message}\r\n`);
-      await this.conn?.write(data);
-    } catch (error) {
-      this.handleClose();
-      throw error;
-    } finally {
-      this.releaseLock();
-    }
+
+      console.log("Sending", command);
+      this.commandQueue.set(command, resolve);
+
+      this.conn.write(`${command}\r\n`, (err) => {
+        if (err) {
+          reject(err);
+        }
+      });
+
+      this.conn.once("error", (err) => {
+        reject(err);
+      });
+
+      setTimeout(() => {
+        reject(new Error("TCP server response timeout"));
+      }, 5000);
+    });
   }
 
-  private async receiveMessage(): Promise<string> {
-    try {
+  sendMessageNoResponse(command: string): Promise<void> {
+    return new Promise((resolve, reject) => {
       if (!this.conn) {
-        await this.connect();
+        reject(new Error("Not connected"));
+        return;
       }
-      const buffer = new Uint8Array(1024);
-      const bytes = await this.conn!.read(buffer);
 
-      if (bytes !== null) {
-        return new TextDecoder().decode(buffer.subarray(0, bytes));
-      }
-      return "";
-    } catch (_error) {
-      this.handleClose();
-      return "";
-    }
-  }
-
-  private scheduleReconnect() {
-    setTimeout(() => {
-      this.connect();
-    }, this.reconnectInterval);
-  }
-
-  private handleClose() {
-    this.scheduleReconnect();
-  }
-
-  close() {
-    this.conn?.close();
-    this.conn = null;
+      this.conn.write(command, (err) => {
+        if (err) {
+          reject(err);
+        }
+        resolve();
+      });
+    });
   }
 }
 
@@ -153,6 +151,7 @@ export class HeatingSystemController {
 
   async getDeviceList(): Promise<Device[]> {
     const response = await this.client.sendMessageWithResponse("l:");
+    console.log("Response", response);
     const base64Data = response.slice(2).trim();
     const decodedData = decode(base64Data);
     const devices: Device[] = [];
