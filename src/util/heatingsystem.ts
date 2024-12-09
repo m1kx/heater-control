@@ -62,16 +62,20 @@ class TcpClient {
       client.on("data", (data) => {
         const stringData = data.toString();
         for (const [command, resolveCommand] of this.commandQueue) {
-          if (stringData.split(':')[0].includes(command.split(':')[0].toUpperCase())) {
+          if (
+            stringData.split(":")[0].includes(
+              command.split(":")[0].toUpperCase(),
+            )
+          ) {
             resolveCommand(stringData);
             this.commandQueue.delete(command);
           }
         }
-      })
+      });
 
       client.on("error", (err) => {
         reject(err);
-      })
+      });
 
       client.on("close", () => {
         this.connected = false;

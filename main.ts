@@ -196,7 +196,17 @@ router.post("/removecron", async (ctx) => {
 router.get("/alloff", async (ctx) => {
   const deviceList = await controller.getDeviceList();
   for (const device of deviceList) {
-    await controller.setTemperature(device.rfAddress, 17)
+    await controller.setTemperature(device.rfAddress, 17);
+  }
+  ctx.response.body = {
+    success: true,
+  };
+});
+
+router.get("/allon", async (ctx) => {
+  const deviceList = await controller.getDeviceList();
+  for (const device of deviceList) {
+    await controller.setTemperature(device.rfAddress, 21);
   }
   ctx.response.body = {
     success: true,
