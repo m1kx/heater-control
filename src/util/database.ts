@@ -36,6 +36,7 @@ const create = (name: string) => {
 
   /**
    * ALTER TABLE crons ADD oneTime BOOLEAN DEFAULT FALSE;
+   * ALTER TABLE crons ADD enabled BOOLEAN DEFAULT TRUE;
    */
 };
 
@@ -75,7 +76,7 @@ const getCrons = (): StoreCron[] => {
           temperature: temperature as number,
           name: name as string,
           oneTime: oneTime as boolean,
-          enabled: enabled as boolean,
+          enabled: (enabled as number) === 1,
         };
       },
     );
@@ -112,7 +113,7 @@ const getCronByName = (name: string): StoreCron | undefined => {
     temperature: cron[0][2] as number,
     name: cron[0][3] as string,
     oneTime: cron[0][4] as boolean,
-    enabled: cron[0][5] as boolean,
+    enabled: (cron[0][5] as number) === 1,
   };
 }
 
