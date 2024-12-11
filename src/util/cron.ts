@@ -24,6 +24,9 @@ const initializeCron = async (cron: StoreCron) => {
       signal: abortController.signal,
     }, async () => {
       console.log(`Running cron ${cron.cron}`);
+      if (cron.oneTime) {
+        removeCron(cron.name);
+      }
       for (const address of cron.rfAdresses) {
         try {
           controller.setTemperature(address, cron.temperature);

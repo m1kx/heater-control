@@ -12,6 +12,7 @@ export interface StoreCron {
   cron: string;
   temperature: number;
   name: string;
+  oneTime: boolean;
 }
 
 const create = (name: string) => {
@@ -27,22 +28,28 @@ const create = (name: string) => {
       name TEXT PRIMARY KEY,
       cron TEXT NOT NULL,
       deviceAdresses TEXT NOT NULL,
-      temperature REAL NOT NULL
+      temperature REAL NOT NULL,
+      oneTime BOOLEAN DEFAULT FALSE
     );
   `);
+
+  /**
+   * ALTER TABLE crons ADD oneTime BOOLEAN DEFAULT FALSE;
+   */
 };
 
-const addCron = ({ cron, rfAdresses, temperature, name }: StoreCron) => {
+const addCron = ({ cron, rfAdresses, temperature, name, oneTime }: StoreCron) => {
   if (!db) {
     throw new Error("DB not initialized");
   }
   db.query(
-    "INSERT INTO crons (cron, deviceAdresses, temperature, name) VALUES (?,?,?,?)",
+    "INSERT INTO crons (cron, deviceAdresses, temperature, name, oneTime) VALUES (?,?,?,?,?)",
     [
       cron,
       JSON.stringify(rfAdresses),
       temperature,
       name,
+      oneTime
     ],
   );
 };
@@ -58,14 +65,15 @@ const getCrons = (): StoreCron[] => {
   if (!db) {
     throw new Error("DB not initialized");
   }
-  return db.query("SELECT cron, deviceAdresses, temperature, name FROM crons")
+  return db.query("SELECT cron, deviceAdresses, temperature, name, oneTime FROM crons")
     .map(
-      ([cron, deviceAdresses, temperature, name]): StoreCron => {
+      ([cron, deviceAdresses, temperature, name, oneTime]): StoreCron => {
         return {
           cron: cron as string,
           rfAdresses: JSON.parse(deviceAdresses as string),
           temperature: temperature as number,
           name: name as string,
+          oneTime: oneTime as boolean,
         };
       },
     );
