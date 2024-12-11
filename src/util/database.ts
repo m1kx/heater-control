@@ -13,6 +13,7 @@ export interface StoreCron {
   temperature: number;
   name: string;
   oneTime: boolean;
+  enabled: boolean;
 }
 
 const create = (name: string) => {
@@ -65,19 +66,55 @@ const getCrons = (): StoreCron[] => {
   if (!db) {
     throw new Error("DB not initialized");
   }
-  return db.query("SELECT cron, deviceAdresses, temperature, name, oneTime FROM crons")
+  return db.query("SELECT cron, deviceAdresses, temperature, name, oneTime, enabled FROM crons")
     .map(
-      ([cron, deviceAdresses, temperature, name, oneTime]): StoreCron => {
+      ([cron, deviceAdresses, temperature, name, oneTime, enabled]): StoreCron => {
         return {
           cron: cron as string,
           rfAdresses: JSON.parse(deviceAdresses as string),
           temperature: temperature as number,
           name: name as string,
           oneTime: oneTime as boolean,
+          enabled: enabled as boolean,
         };
       },
     );
 };
+
+const updateCron = (cron: StoreCron) => {
+  if (!db) {
+    throw new Error("DB not initialized");
+  }
+  db.query(
+    "UPDATE crons SET cron = ?, deviceAdresses = ?, temperature = ?, oneTime = ?, enabled = ? WHERE name = ?",
+    [
+      cron.cron,
+      JSON.stringify(cron.rfAdresses),
+      cron.temperature,
+      cron.oneTime,
+      cron.enabled,
+      cron.name,
+    ],
+  );
+}
+
+const getCronByName = (name: string): StoreCron | undefined => {
+  if (!db) {
+    throw new Error("DB not initialized");
+  }
+  const cron = db.query("SELECT cron, deviceAdresses, temperature, name, oneTime, enabled FROM crons WHERE name = ?", [name]);
+  if (cron.length === 0) {
+    return undefined;
+  }
+  return {
+    cron: cron[0][0] as string,
+    rfAdresses: JSON.parse(cron[0][1] as string),
+    temperature: cron[0][2] as number,
+    name: cron[0][3] as string,
+    oneTime: cron[0][4] as boolean,
+    enabled: cron[0][5] as boolean,
+  };
+}
 
 const insert = (device: StoreDevice) => {
   if (!db) {
@@ -118,4 +155,6 @@ export const Database = {
   addCron,
   getCrons,
   removeCron,
+  getCronByName,
+  updateCron
 };

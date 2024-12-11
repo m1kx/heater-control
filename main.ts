@@ -193,6 +193,34 @@ router.post("/removecron", async (ctx) => {
   }
 });
 
+router.post("/updatecron", async (ctx) => {
+  try {
+    const request: CronRequestBody = await ctx.request.body.json();
+    try {
+      const cron = Database.getCronByName(request.name);
+      if (!cron) {
+        ctx.response.body = {
+          success: false,
+          error: "Cron not found",
+        };
+        return;
+      }
+      Database.updateCron({
+        ...cron,
+        ...request,
+      });
+    } catch (error) {
+      throw error;
+    }
+  } catch (error) {
+    ctx.response.body = {
+      success: false,
+      error: (error as Error).message,
+    };
+    return;
+  }
+})
+
 router.get("/alloff", async (ctx) => {
   const deviceList = await controller.getDeviceList();
   for (const device of deviceList) {

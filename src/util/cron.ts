@@ -24,6 +24,7 @@ const initializeCron = async (cron: StoreCron) => {
       signal: abortController.signal,
     }, async () => {
       console.log(`Running cron ${cron.cron}`);
+      cron = Database.getCronByName(cron.name)!;
       if (cron.oneTime) {
         removeCron(cron.name);
       }
