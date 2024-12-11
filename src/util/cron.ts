@@ -25,6 +25,10 @@ const initializeCron = async (cron: StoreCron) => {
     }, async () => {
       console.log(`Running cron ${cron.cron}`);
       cron = Database.getCronByName(cron.name)!;
+      if (!cron.enabled) {
+        console.log(`Cron ${cron.name} disabled`);
+        return;
+      }
       if (cron.oneTime) {
         removeCron(cron.name);
       }
