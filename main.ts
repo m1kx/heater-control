@@ -153,7 +153,7 @@ router.post("/newcron", async (ctx) => {
     const request: CronRequestBody = await ctx.request.body.json();
     if (
       !request.cron || !request.name || !request.rfAdresses ||
-      !request.temperature || !request.oneTime
+      !request.temperature || request.oneTime === undefined
     ) {
       throw new Error("Missing parameter in request body");
     }
